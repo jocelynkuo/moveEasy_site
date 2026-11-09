@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowLeft, ArrowRight, Box, Building2, CalendarDays, Check, CheckCircle2,
@@ -7,6 +7,7 @@ import {
   ShieldCheck, Sparkles, Star, Trash2, Truck, Upload, X
 } from './icons.jsx';
 import './styles.css';
+import { buildRecordSnapshot, readHistory, writeHistory } from './history.js';
 
 const steps = [
   { label: '搬家需求', short: '需求', icon: Home },
@@ -65,6 +66,9 @@ function App() {
   const [parsed, setParsed] = useState(null);
   const [quotes, setQuotes] = useState([]);
   const [editingQuote, setEditingQuote] = useState(null);
+  const [records, setRecords] = useState(() => readHistory());
+  const [activeRecordId, setActiveRecordId] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const matches = useMemo(() => companies.filter(c =>
     c.areas.includes(form.fromCity) && c.areas.includes(form.toCity) &&
@@ -76,6 +80,33 @@ function App() {
     ...f, special: f.special.includes(value) ? f.special.filter(x => x !== value) : [...f.special, value]
   }));
 
+  const snapshotState = currentStep => ({
+    step: currentStep,
+    form,
+    selectedCompanyId: selectedCompany?.id ?? null,
+    message,
+    quoteDraft: quoteText,
+    activeExample,
+    parsedQuote: parsed,
+    quotes,
+  });
+
+  const persistActive = (currentStep = step) => {
+    if (!activeRecordId) return;
+    setRecords(current => {
+      const existing = current.find(record => record.id === activeRecordId);
+      if (!existing) return current;
+      const updated = buildRecordSnapshot(existing, snapshotState(currentStep));
+      const next = current.map(record => record.id === activeRecordId ? updated : record);
+      writeHistory(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    persistActive(step);
+  }, [activeRecordId, step, form, selectedCompany, message, quoteText, activeExample, parsed, quotes]);
+
   const validate = () => {
     const next = {};
     if (!form.date) next.date = '請選擇搬家日期';
@@ -84,13 +115,28 @@ function App() {
     if (!form.size) next.size = '請選擇搬家規模';
     if (!form.boxes && !form.items.trim()) next.items = '請至少填寫箱數或物品';
     setErrors(next);
-    if (!Object.keys(next).length) setStep(1);
+    if (!Object.keys(next).length) {
+      if (activeRecordId) {
+        persistActive(1);
+      } else {
+        const record = buildRecordSnapshot(null, snapshotState(1));
+        setRecords(current => {
+          const nextRecords = [...current, record];
+          writeHistory(nextRecords);
+          return nextRecords;
+        });
+        setActiveRecordId(record.id);
+      }
+      setStep(1);
+    }
   };
 
   const makeMessage = company => {
     const special = form.special.length ? form.special.join('、') : '無';
     const text = `您好，我想詢問 ${form.date.replaceAll('-', '/')} 的搬家報價：\n\n・搬出：${form.fromCity}${form.fromDistrict}，${form.fromFloor || '未提供'} 樓（${form.fromElevator}）\n・搬入：${form.toCity}${form.toDistrict}，${form.toFloor || '未提供'} 樓（${form.toElevator}）\n・規模：${form.size}，約 ${form.boxes || '未提供'} 箱\n・主要物品：${form.items || '未提供'}\n・特殊需求：${special}${form.note ? `\n・備註：${form.note}` : ''}\n\n想請問預估總價、包含的服務與可能的額外費用，謝謝！`;
-    setSelectedCompany(company); setMessage(text); setStep(2); setCopied(false);
+    setSelectedCompany(company);
+    if (selectedCompany?.id !== company.id || !message) setMessage(text);
+    setStep(2); setCopied(false);
   };
 
   const copyMessage = async () => {
@@ -110,27 +156,70 @@ function App() {
     setParsed(null); setQuoteText(''); setEditingQuote(null);
   };
 
+  const returnToRecommendations = () => {
+    persistActive(1);
+    setStep(1);
+  };
+
+  const openHistory = () => {
+    persistActive(step);
+    setHistoryOpen(true);
+  };
+
+  const resetWorkflow = () => {
+    setStep(0);
+    setForm(structuredClone(initialForm));
+    setErrors({});
+    setSelectedCompany(companies[0]);
+    setMessage('');
+    setCopied(false);
+    setQuoteText('');
+    setActiveExample('orange');
+    setParsed(null);
+    setQuotes([]);
+    setEditingQuote(null);
+    setActiveRecordId(null);
+    setHistoryOpen(false);
+  };
+
+  const restoreRecord = record => {
+    setForm(structuredClone(record.form));
+    setSelectedCompany(companies.find(company => company.id === record.selectedCompanyId) ?? companies[0]);
+    setMessage(record.message);
+    setQuoteText(record.quoteDraft);
+    setActiveExample(record.activeExample);
+    setParsed(record.parsedQuote ? structuredClone(record.parsedQuote) : null);
+    setQuotes(structuredClone(record.quotes));
+    setEditingQuote(null);
+    setErrors({});
+    setActiveRecordId(record.id);
+    setStep(record.lastCompletedStep);
+    setHistoryOpen(false);
+  };
+
   return (
     <div className="app-shell">
-      <Header />
-      <Progress step={step} setStep={setStep} />
+      <Header onHistory={openHistory} historyOpen={historyOpen} />
+      {!historyOpen && <Progress step={step} setStep={setStep} />}
       <main>
-        {step === 0 && <RequestForm form={form} update={update} toggleSpecial={toggleSpecial} errors={errors} onNext={validate} />}
-        {step === 1 && <Recommendations matches={matches} form={form} onEdit={() => setStep(0)} onSelect={makeMessage} />}
-        {step === 2 && <Contact company={selectedCompany} message={message} setMessage={setMessage} copied={copied} onCopy={copyMessage} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-        {step === 3 && <QuoteOrganizer quoteText={quoteText} setQuoteText={setQuoteText} activeExample={activeExample} setActiveExample={setActiveExample} parsed={parsed} setParsed={setParsed} quotes={quotes} onAnalyze={analyzeQuote} onSave={saveQuote} editingQuote={editingQuote} setEditingQuote={setEditingQuote} onCompare={() => setStep(4)} onBack={() => setStep(2)} />}
-        {step === 4 && <Comparison quotes={quotes} setQuotes={setQuotes} onAdd={() => setStep(3)} onRestart={() => { setStep(0); setQuotes([]); }} />}
+        {historyOpen ? <History records={records} onResume={restoreRecord} onNew={resetWorkflow} /> : <>
+          {step === 0 && <RequestForm form={form} update={update} toggleSpecial={toggleSpecial} errors={errors} onNext={validate} />}
+          {step === 1 && <Recommendations matches={matches} form={form} onEdit={() => setStep(0)} onSelect={makeMessage} />}
+          {step === 2 && <Contact company={selectedCompany} message={message} setMessage={setMessage} copied={copied} onCopy={copyMessage} onBack={returnToRecommendations} onNext={() => setStep(3)} />}
+          {step === 3 && <QuoteOrganizer quoteText={quoteText} setQuoteText={setQuoteText} activeExample={activeExample} setActiveExample={setActiveExample} parsed={parsed} setParsed={setParsed} quotes={quotes} onAnalyze={analyzeQuote} onSave={saveQuote} editingQuote={editingQuote} setEditingQuote={setEditingQuote} onCompare={() => setStep(4)} onBack={returnToRecommendations} />}
+          {step === 4 && <Comparison quotes={quotes} setQuotes={setQuotes} onAdd={() => setStep(3)} onRestart={resetWorkflow} onBack={returnToRecommendations} />}
+        </>}
       </main>
       <Footer />
     </div>
   );
 }
 
-function Header() {
+function Header({ onHistory, historyOpen }) {
   return <header className="topbar">
-    <a className="brand" href="#" aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></a>
+    <button className="brand brand-button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></button>
     <div className="prototype-badge"><Sparkles size={14} /> MVP 測試版</div>
-    <div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div>
+    <div className="header-actions"><div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div><button className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory}><Clock3 size={17} /> 詢價紀錄</button></div>
   </header>;
 }
 
@@ -146,6 +235,22 @@ function Progress({ step, setStep }) {
 
 function PageIntro({ eyebrow, title, text }) { return <div className="page-intro"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{text}</p></div>; }
 function Field({ label, required, error, children, hint }) { return <label className={`field ${error ? 'has-error' : ''}`}><span className="field-label">{label}{required && <b>*</b>}</span>{children}{hint && <small>{hint}</small>}{error && <small className="error-text">{error}</small>}</label>; }
+function BackControl({ children, onClick }) { return <button className="page-back" onClick={onClick}><ArrowLeft size={18}/><span>{children}</span></button>; }
+
+function History({ records, onResume, onNew }) {
+  const sorted = [...records].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  const dateTime = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
+  return <section className="container history-view">
+    <PageIntro eyebrow="儲存在此瀏覽器" title="詢價紀錄" text="回到先前的搬家需求，繼續聯絡業者、整理報價或比較方案。" />
+    {sorted.length ? <div className="history-grid">{sorted.map(record => <article className="card history-card" key={record.id}>
+      <div className="history-card-head"><span className="history-date"><CalendarDays size={17}/>{record.form.date}</span><span className={`status-badge stage-${record.lastCompletedStep}`}>{steps[record.lastCompletedStep]?.label ?? '推薦業者'}</span></div>
+      <h2>{record.form.fromCity}{record.form.fromDistrict} <ArrowRight size={17}/> {record.form.toCity}{record.form.toDistrict}</h2>
+      <div className="history-meta"><span><LineChart size={16}/> 進度：{record.lastCompletedStep + 1} / 5</span><span><FileText size={16}/> {record.quotes.length} 份已確認報價</span><span><Clock3 size={16}/> 更新於 {dateTime.format(new Date(record.updatedAt))}</span></div>
+      <button className="primary full" onClick={() => onResume(record)}>繼續這筆詢價 <ArrowRight size={17}/></button>
+    </article>)}</div> : <div className="empty-state history-empty"><span><Clock3 size={34}/></span><h2>還沒有詢價紀錄</h2><p>完成搬家需求並查看推薦業者後，紀錄就會安全地保存在這個瀏覽器。</p><button className="primary" onClick={onNew}><Plus size={17}/> 建立搬家需求</button></div>}
+    {sorted.length > 0 && <div className="action-row center"><button className="secondary" onClick={onNew}><Plus size={17}/> 建立新的搬家需求</button></div>}
+  </section>;
+}
 
 function RequestForm({ form, update, toggleSpecial, errors, onNext }) {
   const cityOptions = ['台北市', '新北市', '桃園市'];
@@ -194,6 +299,7 @@ function Recommendations({ matches, form, onEdit, onSelect }) {
 
 function Contact({ company, message, setMessage, copied, onCopy, onBack, onNext }) {
   return <section className="container narrow">
+    <BackControl onClick={onBack}>上一頁</BackControl>
     <PageIntro eyebrow="STEP 3 / 5" title="把需求一次說清楚" text="確認訊息後複製到 LINE 或電話聯絡業者；MoveEasy 不會替你自動發送。" />
     <div className="contact-layout">
       <aside className="card contact-card"><div className="company-logo large" style={{ background: company.color }}>{company.initials}</div><h2>{company.name}</h2><span className="mock-label block">模擬業者資料</span><p>{company.desc}</p><hr/>
@@ -203,13 +309,14 @@ function Contact({ company, message, setMessage, copied, onCopy, onBack, onNext 
       </aside>
       <div className="card message-card"><div className="card-heading"><div><span className="eyebrow">詢價訊息</span><h2>已依你的需求產生</h2></div><Edit3 size={19}/></div><textarea value={message} onChange={e => setMessage(e.target.value)} rows="14"/><div className="message-actions"><span><Info size={14}/> 可直接修改文字</span><button className={copied ? 'success-btn' : 'primary'} onClick={onCopy}>{copied ? <CheckCircle2 size={17}/> : <Clipboard size={17}/>} {copied ? '已複製' : '複製詢價訊息'}</button></div></div>
     </div>
-    <div className="action-row"><button className="ghost" onClick={onBack}><ArrowLeft size={17}/> 返回業者列表</button><button className="primary" onClick={onNext}>我已取得報價，下一步 <ArrowRight size={17}/></button></div>
+    <div className="action-row end"><button className="primary" onClick={onNext}>我已取得報價，下一步 <ArrowRight size={17}/></button></div>
   </section>;
 }
 
 function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExample, parsed, setParsed, quotes, onAnalyze, onSave, editingQuote, setEditingQuote, onCompare, onBack }) {
   const loadExample = key => { setActiveExample(key); setQuoteText(quoteExamples[key]); setParsed(null); };
   return <section className="container">
+    <BackControl onClick={onBack}>返回推薦業者</BackControl>
     <PageIntro eyebrow="STEP 4 / 5" title="把零散報價，整理成好比較的格式" text="貼上業者回覆或上傳截圖。此版本使用規則模擬辨識，結果仍需由你確認。" />
     <div className="ai-note"><Sparkles size={19}/><div><strong>模擬 AI 辨識</strong><span>不代表真實 AI 準確度，重要價格與服務內容請務必人工核對。</span></div></div>
     <div className="quote-workspace">
@@ -224,7 +331,7 @@ function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExamp
       </div>
     </div>
     {quotes.length > 0 && <div className="saved-quotes"><div className="saved-head"><div><span className="eyebrow">已確認報價</span><h2>{quotes.length} 份報價已加入比較</h2></div><button className="primary" onClick={onCompare}>前往比較 <ArrowRight size={17}/></button></div><div className="saved-list">{quotes.map(q => <div key={q.id}><CheckCircle2 size={19}/><strong>{q.company}</strong><span>NT$ {q.total.toLocaleString()}</span><button onClick={() => setEditingQuote(editingQuote === q.id ? null : q.id)}><Edit3 size={15}/></button>{editingQuote === q.id && <div className="inline-edit"><QuoteEditor quote={q} onCancel={() => setEditingQuote(null)} onSave={onSave}/></div>}</div>)}</div>{quotes.length === 1 && <p className="one-quote"><Info size={15}/> 再新增一份報價，就能並列比較差異。</p>}</div>}
-    <div className="action-row"><button className="ghost" onClick={onBack}><ArrowLeft size={17}/> 返回詢價訊息</button>{quotes.length > 0 && <button className="secondary" onClick={onCompare}>查看目前報價</button>}</div>
+    {quotes.length > 0 && <div className="action-row end"><button className="secondary" onClick={onCompare}>查看目前報價</button></div>}
   </section>;
 }
 
@@ -243,10 +350,11 @@ function QuoteEditor({ quote, onCancel, onSave }) {
 }
 const splitTags = text => text.split(/[、,，\n]/).map(x => x.trim()).filter(Boolean);
 
-function Comparison({ quotes, setQuotes, onAdd, onRestart }) {
+function Comparison({ quotes, setQuotes, onAdd, onRestart, onBack }) {
   const lowest = quotes.length > 1 ? Math.min(...quotes.map(q => q.total)) : null;
   const remove = id => setQuotes(qs => qs.filter(q => q.id !== id));
   return <section className="container">
+    <BackControl onClick={onBack}>返回推薦業者</BackControl>
     <div className="complete-icon"><CheckCircle2 size={32}/></div><PageIntro eyebrow="STEP 5 / 5" title="報價差異，一眼看清楚" text={quotes.length > 1 ? '價格只是其中一項，記得一起確認服務範圍、額外費用與未確認事項。' : '目前只有一份報價，仍可查看整理結果；新增另一份後即可並列比較。'} />
     {quotes.length ? <div className="comparison-scroll"><table className="comparison-table"><thead><tr><th>比較項目</th>{quotes.map(q => <th key={q.id}><div><span>{q.company}</span><button aria-label={`刪除 ${q.company}`} onClick={() => remove(q.id)}><Trash2 size={15}/></button></div></th>)}</tr></thead><tbody>
       <tr className="price-row"><td>報價總金額</td>{quotes.map(q => <td key={q.id}><strong>NT$ {q.total.toLocaleString()}</strong>{lowest === q.total && <span className="low-tag">目前最低價</span>}</td>)}</tr>
