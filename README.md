@@ -29,6 +29,7 @@ npm run dev
 
 ```sh
 npm run build
+npm run verify:pages
 npm run preview
 ```
 
@@ -44,7 +45,7 @@ npm run preview
 
 若主要分支不是 `main`，請同步修改工作流程的 `on.push.branches`。儲存庫須允許 GitHub Actions 並具備 GitHub Pages 使用資格。工作流程使用內建的 `GITHUB_TOKEN` 權限，不需要另設個人存取權杖。
 
-工作流程每次使用 `npm ci` 安裝鎖定版本並重新建置，只發布 `dist/`；不會把原始碼根目錄當成網站，也不依賴儲存庫內既有的 `dist` 檔案。請勿選擇以分支根目錄直接發布，因為原始 JSX 需要經 Vite 編譯。
+工作流程每次使用 `npm ci` 安裝鎖定版本並重新建置，接著執行 `npm run verify:pages` 檢查入口、相對資源網址與實際檔案，只發布通過驗證的 `dist/`；不會把原始碼根目錄當成網站，也不依賴儲存庫內既有的 `dist` 檔案。請勿選擇以分支根目錄直接發布，因為原始 JSX 需要經 Vite 編譯。
 
 `vite.config.js` 使用相對資源路徑 `./`，可支援專案子目錄、不同儲存庫名稱與自訂網域根目錄。現有頁面透過 React 狀態切換，沒有獨立網址路由，重新整理會回到初始畫面；不需要 SPA 的 `404.html` 轉址。未來若加入網址路由，需使用 hash 路由或另行處理 Pages 的深層路徑 404。
 
