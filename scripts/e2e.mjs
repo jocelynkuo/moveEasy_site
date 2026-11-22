@@ -159,6 +159,33 @@ if (!responsive.visible || responsive.scrollWidth > 320 || responsive.viewport !
   throw new Error('320px responsive or unsupported-version fallback check failed: ' + JSON.stringify(responsive));
 }
 
+const deletion = await run(`
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const find = text => [...document.querySelectorAll('button')].find(item => item.textContent.includes(text));
+  const click = async text => { const target = find(text); if (!target) throw new Error('Missing button: ' + text); target.click(); await sleep(80); };
+  await click('建立搬家需求');
+  await click('查看推薦業者');
+  await click('詢價紀錄');
+  const card = document.querySelector('.history-card');
+  if (!card) throw new Error('New inquiry was not listed in history');
+  const moreButton = card.querySelector('.history-more-button');
+  if (!moreButton || moreButton.getAttribute('aria-label') !== '更多紀錄操作' || moreButton.textContent.trim() !== '⋯') throw new Error('Icon-only more button was not visible');
+  if (card.querySelector('.history-delete')) throw new Error('Delete action was visible before opening the more menu');
+  moreButton.click(); await sleep(60);
+  if (!card.querySelector('.history-delete')) throw new Error('Delete action did not appear in the more menu');
+  card.querySelector('h2').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); await sleep(60);
+  if (card.querySelector('.history-delete')) throw new Error('Clicking outside the more menu did not close it');
+  moreButton.click(); await sleep(60);
+  const deleteButton = card.querySelector('.history-delete');
+  if (!deleteButton || !deleteButton.textContent.includes('刪除')) throw new Error('Delete action did not reappear in the more menu');
+  deleteButton.click(); await sleep(80);
+  const stored = JSON.parse(localStorage.getItem('moveeasy.quote-history'));
+  return { buttonVisible: Boolean(deleteButton), cardRemoved: !document.querySelector('.history-card'), storedRecords: stored.records.length };
+`);
+if (!deletion.buttonVisible || !deletion.cardRemoved || deletion.storedRecords !== 0) {
+  throw new Error('History deletion verification failed: ' + JSON.stringify(deletion));
+}
+
 await send('Emulation.clearDeviceMetricsOverride');
 socket.close();
-console.log(JSON.stringify({ flow: result, reloaded, malformed, responsive }, null, 2));
+console.log(JSON.stringify({ flow: result, reloaded, malformed, responsive, deletion }, null, 2));

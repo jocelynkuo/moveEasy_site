@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowLeft, ArrowRight, Box, Building2, CalendarDays, Check, CheckCircle2,
@@ -156,6 +156,11 @@ function App() {
     setParsed(null); setQuoteText(''); setEditingQuote(null);
   };
 
+  const deleteQuote = id => {
+    setQuotes(prev => prev.filter(q => q.id !== id));
+    setEditingQuote(current => current === id ? null : current);
+  };
+
   const returnToRecommendations = () => {
     persistActive(1);
     setStep(1);
@@ -197,16 +202,25 @@ function App() {
     setHistoryOpen(false);
   };
 
+  const deleteRecord = id => {
+    setRecords(current => {
+      const next = current.filter(record => record.id !== id);
+      writeHistory(next);
+      return next;
+    });
+    if (activeRecordId === id) setActiveRecordId(null);
+  };
+
   return (
     <div className="app-shell">
       <Header onHistory={openHistory} historyOpen={historyOpen} />
       {!historyOpen && <Progress step={step} setStep={setStep} />}
       <main>
-        {historyOpen ? <History records={records} onResume={restoreRecord} onNew={resetWorkflow} /> : <>
+        {historyOpen ? <History records={records} onResume={restoreRecord} onDelete={deleteRecord} onNew={resetWorkflow} /> : <>
           {step === 0 && <RequestForm form={form} update={update} toggleSpecial={toggleSpecial} errors={errors} onNext={validate} />}
           {step === 1 && <Recommendations matches={matches} form={form} onEdit={() => setStep(0)} onSelect={makeMessage} />}
           {step === 2 && <Contact company={selectedCompany} message={message} setMessage={setMessage} copied={copied} onCopy={copyMessage} onBack={returnToRecommendations} onNext={() => setStep(3)} />}
-          {step === 3 && <QuoteOrganizer quoteText={quoteText} setQuoteText={setQuoteText} activeExample={activeExample} setActiveExample={setActiveExample} parsed={parsed} setParsed={setParsed} quotes={quotes} onAnalyze={analyzeQuote} onSave={saveQuote} editingQuote={editingQuote} setEditingQuote={setEditingQuote} onCompare={() => setStep(4)} onBack={returnToRecommendations} />}
+          {step === 3 && <QuoteOrganizer quoteText={quoteText} setQuoteText={setQuoteText} activeExample={activeExample} setActiveExample={setActiveExample} parsed={parsed} setParsed={setParsed} quotes={quotes} onAnalyze={analyzeQuote} onSave={saveQuote} onDelete={deleteQuote} editingQuote={editingQuote} setEditingQuote={setEditingQuote} onCompare={() => setStep(4)} onBack={returnToRecommendations} />}
           {step === 4 && <Comparison quotes={quotes} setQuotes={setQuotes} onAdd={() => setStep(3)} onRestart={resetWorkflow} onBack={returnToRecommendations} />}
         </>}
       </main>
@@ -237,7 +251,24 @@ function PageIntro({ eyebrow, title, text }) { return <div className="page-intro
 function Field({ label, required, error, children, hint }) { return <label className={`field ${error ? 'has-error' : ''}`}><span className="field-label">{label}{required && <b>*</b>}</span>{children}{hint && <small>{hint}</small>}{error && <small className="error-text">{error}</small>}</label>; }
 function BackControl({ children, onClick }) { return <button className="page-back" onClick={onClick}><ArrowLeft size={18}/><span>{children}</span></button>; }
 
-function History({ records, onResume, onNew }) {
+function History({ records, onResume, onDelete, onNew }) {
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const openMenuRef = useRef(null);
+  useEffect(() => {
+    if (!openMenuId) return undefined;
+    const closeOnOutsideClick = event => {
+      if (!openMenuRef.current?.contains(event.target)) setOpenMenuId(null);
+    };
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') setOpenMenuId(null);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openMenuId]);
   const sorted = [...records].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   const dateTime = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
   return <section className="container history-view">
@@ -246,7 +277,7 @@ function History({ records, onResume, onNew }) {
       <div className="history-card-head"><span className="history-date"><CalendarDays size={17}/>{record.form.date}</span><span className={`status-badge stage-${record.lastCompletedStep}`}>{steps[record.lastCompletedStep]?.label ?? '推薦業者'}</span></div>
       <h2>{record.form.fromCity}{record.form.fromDistrict} <ArrowRight size={17}/> {record.form.toCity}{record.form.toDistrict}</h2>
       <div className="history-meta"><span><LineChart size={16}/> 進度：{record.lastCompletedStep + 1} / 5</span><span><FileText size={16}/> {record.quotes.length} 份已確認報價</span><span><Clock3 size={16}/> 更新於 {dateTime.format(new Date(record.updatedAt))}</span></div>
-      <button className="primary full" onClick={() => onResume(record)}>繼續這筆詢價 <ArrowRight size={17}/></button>
+      <div className="history-card-actions"><button className="primary" onClick={() => onResume(record)}>繼續這筆詢價 <ArrowRight size={17}/></button><div className="history-more" ref={openMenuId === record.id ? openMenuRef : null}><button className="history-more-button" aria-haspopup="menu" aria-expanded={openMenuId === record.id} aria-label="更多紀錄操作" title="更多紀錄操作" onClick={() => setOpenMenuId(current => current === record.id ? null : record.id)}><span aria-hidden="true">⋯</span></button>{openMenuId === record.id && <div className="history-more-menu" role="menu"><button className="history-delete" role="menuitem" aria-label={`刪除 ${record.form.fromCity}${record.form.fromDistrict} 至 ${record.form.toCity}${record.form.toDistrict} 的詢價紀錄`} onClick={() => { setOpenMenuId(null); onDelete(record.id); }}><Trash2 size={16}/> 刪除</button></div>}</div></div>
     </article>)}</div> : <div className="empty-state history-empty"><span><Clock3 size={34}/></span><h2>還沒有詢價紀錄</h2><p>完成搬家需求並查看推薦業者後，紀錄就會安全地保存在這個瀏覽器。</p><button className="primary" onClick={onNew}><Plus size={17}/> 建立搬家需求</button></div>}
     {sorted.length > 0 && <div className="action-row center"><button className="secondary" onClick={onNew}><Plus size={17}/> 建立新的搬家需求</button></div>}
   </section>;
@@ -314,7 +345,7 @@ function Contact({ company, message, setMessage, copied, onCopy, onBack, onNext 
   </section>;
 }
 
-function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExample, parsed, setParsed, quotes, onAnalyze, onSave, editingQuote, setEditingQuote, onCompare, onBack }) {
+function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExample, parsed, setParsed, quotes, onAnalyze, onSave, onDelete, editingQuote, setEditingQuote, onCompare, onBack }) {
   const loadExample = key => { setActiveExample(key); setQuoteText(quoteExamples[key]); setParsed(null); };
   return <section className="container">
     <BackControl onClick={onBack}>返回推薦業者</BackControl>
@@ -331,7 +362,7 @@ function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExamp
         {parsed ? <QuoteEditor quote={parsed} onCancel={() => setParsed(null)} onSave={onSave} /> : <div className="result-placeholder"><span><FileText size={32}/></span><h3>等待辨識報價</h3><p>辨識後的金額、服務與待確認事項會顯示在這裡。</p></div>}
       </div>
     </div>
-    {quotes.length > 0 && <div className="saved-quotes"><div className="saved-head"><div><span className="eyebrow">已確認報價</span><h2>{quotes.length} 份報價已加入比較</h2></div><button className="primary" onClick={onCompare}>前往比較 <ArrowRight size={17}/></button></div><div className="saved-list">{quotes.map(q => <div key={q.id}><CheckCircle2 size={19}/><strong>{q.company}</strong><span>NT$ {q.total.toLocaleString()}</span><button onClick={() => setEditingQuote(editingQuote === q.id ? null : q.id)}><Edit3 size={15}/></button>{editingQuote === q.id && <div className="inline-edit"><QuoteEditor quote={q} onCancel={() => setEditingQuote(null)} onSave={onSave}/></div>}</div>)}</div>{quotes.length === 1 && <p className="one-quote"><Info size={15}/> 再新增一份報價，就能並列比較差異。</p>}</div>}
+    {quotes.length > 0 && <div className="saved-quotes"><div className="saved-head"><div><span className="eyebrow">已確認報價</span><h2>{quotes.length} 份報價已加入比較</h2></div><button className="primary" onClick={onCompare}>前往比較 <ArrowRight size={17}/></button></div><div className="saved-list">{quotes.map(q => <div key={q.id}><CheckCircle2 size={19}/><strong>{q.company}</strong><span>NT$ {q.total.toLocaleString()}</span><button aria-label={`編輯 ${q.company} 報價`} title="編輯報價" onClick={() => setEditingQuote(editingQuote === q.id ? null : q.id)}><Edit3 size={15}/></button><button aria-label={`刪除 ${q.company} 報價`} title="刪除報價" onClick={() => onDelete(q.id)}><Trash2 size={15}/></button>{editingQuote === q.id && <div className="inline-edit"><QuoteEditor quote={q} onCancel={() => setEditingQuote(null)} onSave={onSave}/></div>}</div>)}</div>{quotes.length === 1 && <p className="one-quote"><Info size={15}/> 再新增一份報價，就能並列比較差異。</p>}</div>}
     {quotes.length > 0 && <div className="action-row end"><button className="secondary" onClick={onCompare}>查看目前報價</button></div>}
   </section>;
 }
