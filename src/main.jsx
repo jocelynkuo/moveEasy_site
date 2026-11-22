@@ -69,6 +69,7 @@ function App() {
   const [records, setRecords] = useState(() => readHistory());
   const [activeRecordId, setActiveRecordId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const historyControlRef = useRef(null);
 
   const matches = useMemo(() => companies.filter(c =>
     c.areas.includes(form.fromCity) && c.areas.includes(form.toCity) &&
@@ -171,6 +172,25 @@ function App() {
     setHistoryOpen(true);
   };
 
+  const toggleHistory = () => {
+    if (historyOpen) {
+      setHistoryOpen(false);
+      return;
+    }
+    openHistory();
+  };
+
+  useEffect(() => {
+    if (!historyOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    historyControlRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      historyControlRef.current?.focus();
+    };
+  }, [historyOpen]);
+
   const resetWorkflow = () => {
     setStep(0);
     setForm(structuredClone(initialForm));
@@ -212,10 +232,15 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
-      <Header onHistory={openHistory} historyOpen={historyOpen} />
+    <div
+      className={`app-shell ${historyOpen ? 'history-open' : ''}`}
+      role={historyOpen ? 'dialog' : undefined}
+      aria-modal={historyOpen ? 'true' : undefined}
+      aria-labelledby={historyOpen ? 'history-page-title' : undefined}
+    >
+      <Header onHistory={toggleHistory} historyOpen={historyOpen} historyControlRef={historyControlRef} />
       {!historyOpen && <Progress step={step} setStep={setStep} />}
-      <main>
+      <main className={historyOpen ? 'history-modal-main' : ''}>
         {historyOpen ? <History records={records} onResume={restoreRecord} onDelete={deleteRecord} onNew={resetWorkflow} /> : <>
           {step === 0 && <RequestForm form={form} update={update} toggleSpecial={toggleSpecial} errors={errors} onNext={validate} />}
           {step === 1 && <Recommendations matches={matches} form={form} onEdit={() => setStep(0)} onSelect={makeMessage} />}
@@ -224,16 +249,16 @@ function App() {
           {step === 4 && <Comparison quotes={quotes} setQuotes={setQuotes} onAdd={() => setStep(3)} onRestart={resetWorkflow} onBack={returnToRecommendations} />}
         </>}
       </main>
-      <Footer />
+      {!historyOpen && <Footer />}
     </div>
   );
 }
 
-function Header({ onHistory, historyOpen }) {
+function Header({ onHistory, historyOpen, historyControlRef }) {
   return <header className="topbar">
     <button className="brand brand-button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></button>
     <div className="prototype-badge"><Sparkles size={14} /> MVP 測試版</div>
-    <div className="header-actions"><div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div><button className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory}><Clock3 size={17} /> 詢價紀錄</button></div>
+    <div className="header-actions"><div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div><button ref={historyControlRef} type="button" className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory} aria-label={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'} aria-expanded={historyOpen} title={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'}>{historyOpen ? <X size={20} /> : <><Clock3 size={17} /> 詢價紀錄</>}</button></div>
   </header>;
 }
 
@@ -247,7 +272,7 @@ function Progress({ step, setStep }) {
   </div></nav>;
 }
 
-function PageIntro({ eyebrow, title, text }) { return <div className="page-intro"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{text}</p></div>; }
+function PageIntro({ eyebrow, title, text, id }) { return <div className="page-intro"><span className="eyebrow">{eyebrow}</span><h1 id={id}>{title}</h1><p>{text}</p></div>; }
 function Field({ label, required, error, children, hint }) { return <label className={`field ${error ? 'has-error' : ''}`}><span className="field-label">{label}{required && <b>*</b>}</span>{children}{hint && <small>{hint}</small>}{error && <small className="error-text">{error}</small>}</label>; }
 function BackControl({ children, onClick }) { return <button className="page-back" onClick={onClick}><ArrowLeft size={18}/><span>{children}</span></button>; }
 
@@ -272,7 +297,7 @@ function History({ records, onResume, onDelete, onNew }) {
   const sorted = [...records].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   const dateTime = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
   return <section className="container history-view">
-    <PageIntro eyebrow="儲存在此瀏覽器" title="詢價紀錄" text="回到先前的搬家需求，繼續聯絡業者、整理報價或比較方案。" />
+    <PageIntro id="history-page-title" eyebrow="儲存在此瀏覽器" title="詢價紀錄" text="回到先前的搬家需求，繼續聯絡業者、整理報價或比較方案。" />
     {sorted.length ? <div className="history-grid">{sorted.map(record => <article className="card history-card" key={record.id}>
       <div className="history-card-head"><span className="history-date"><CalendarDays size={17}/>{record.form.date}</span><span className={`status-badge stage-${record.lastCompletedStep}`}>{steps[record.lastCompletedStep]?.label ?? '推薦業者'}</span></div>
       <h2>{record.form.fromCity}{record.form.fromDistrict} <ArrowRight size={17}/> {record.form.toCity}{record.form.toDistrict}</h2>
