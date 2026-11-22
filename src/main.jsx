@@ -282,6 +282,7 @@ function FloorGroup({ title, floor, elevator, onFloor, onElevator }) { return <d
 
 function Recommendations({ matches, form, onEdit, onSelect }) {
   return <section className="container">
+    <BackControl onClick={onEdit}>回到上一頁</BackControl>
     <PageIntro eyebrow="STEP 2 / 5" title={`找到 ${matches.length} 家符合條件的業者`} text="以下依服務區域、搬家規模與特殊需求篩選；推薦不代表品質認證。" />
     <div className="summary-bar"><div><MapPin size={17}/><span>{form.fromCity}{form.fromDistrict}</span><ChevronRight size={15}/><span>{form.toCity}{form.toDistrict}</span></div><div><CalendarDays size={17}/>{form.date}</div><div><Box size={17}/>{form.size}・約 {form.boxes} 箱</div><button onClick={onEdit}><Edit3 size={15}/> 修改需求</button></div>
     {matches.length ? <div className="company-grid">{matches.map((c, i) => <article className="company-card" key={c.id}>
