@@ -279,7 +279,7 @@ function Header({ onHome, onHistory, historyOpen, historyControlRef }) {
   return <header className="topbar">
     <button type="button" className="brand brand-button" onClick={onHome} aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></button>
     <div className="prototype-badge"><Sparkles size={14} /> MVP 測試版</div>
-    <div className="header-actions"><div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div><button ref={historyControlRef} type="button" className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory} aria-label={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'} aria-expanded={historyOpen} title={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'}>{historyOpen ? <X size={20} /> : <><Clock3 size={17} /> 詢價紀錄</>}</button></div>
+    <div className="header-actions"><button ref={historyControlRef} type="button" className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory} aria-label={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'} aria-expanded={historyOpen} title={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'}>{historyOpen ? <X size={20} /> : <><Clock3 size={17} /> 詢價紀錄</>}</button></div>
   </header>;
 }
 
