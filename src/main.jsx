@@ -38,6 +38,12 @@ const companies = [
   }
 ];
 
+const cityDistricts = {
+  台北市: ['松山區', '信義區', '大安區', '中山區', '中正區', '大同區', '萬華區', '文山區', '南港區', '內湖區', '士林區', '北投區'],
+  新北市: ['板橋區', '三重區', '中和區', '永和區', '新莊區', '新店區', '樹林區', '鶯歌區', '三峽區', '淡水區', '汐止區', '瑞芳區', '土城區', '蘆洲區', '五股區', '泰山區', '林口區', '深坑區', '石碇區', '坪林區', '三芝區', '石門區', '八里區', '平溪區', '雙溪區', '貢寮區', '金山區', '萬里區', '烏來區'],
+  桃園市: ['桃園區', '中壢區', '大溪區', '楊梅區', '蘆竹區', '大園區', '龜山區', '八德區', '龍潭區', '平鎮區', '新屋區', '觀音區', '復興區'],
+};
+
 const initialForm = {
   date: '2026-12-12', fromCity: '台北市', fromDistrict: '大安區', toCity: '新北市',
   toDistrict: '板橋區', size: '套房搬家', boxes: '10', items: '單人床墊、書桌、辦公椅、三層櫃',
@@ -76,7 +82,16 @@ function App() {
     (!form.special.length || form.special.every(s => c.services.includes(s)))
   ), [form]);
 
-  const update = (key, value) => setForm(f => ({ ...f, [key]: value }));
+  const update = (key, value) => {
+    setForm(f => {
+      const next = { ...f, [key]: value };
+      const districtKey = key === 'fromCity' ? 'fromDistrict' : key === 'toCity' ? 'toDistrict' : null;
+      if (districtKey && !cityDistricts[value]?.includes(f[districtKey])) next[districtKey] = '';
+      return next;
+    });
+    if (key === 'fromCity' || key === 'fromDistrict') setErrors(current => ({ ...current, from: undefined }));
+    if (key === 'toCity' || key === 'toDistrict') setErrors(current => ({ ...current, to: undefined }));
+  };
   const toggleSpecial = value => setForm(f => ({
     ...f, special: f.special.includes(value) ? f.special.filter(x => x !== value) : [...f.special, value]
   }));
@@ -111,8 +126,8 @@ function App() {
   const validate = () => {
     const next = {};
     if (!form.date) next.date = '請選擇搬家日期';
-    if (!form.fromCity || !form.fromDistrict) next.from = '請填寫搬出區域';
-    if (!form.toCity || !form.toDistrict) next.to = '請填寫搬入區域';
+    if (!cityDistricts[form.fromCity]?.includes(form.fromDistrict)) next.from = form.fromDistrict ? '請選擇有效的搬出行政區' : '請選擇搬出行政區';
+    if (!cityDistricts[form.toCity]?.includes(form.toDistrict)) next.to = form.toDistrict ? '請選擇有效的搬入行政區' : '請選擇搬入行政區';
     if (!form.size) next.size = '請選擇搬家規模';
     if (!form.boxes && !form.items.trim()) next.items = '請至少填寫箱數或物品';
     setErrors(next);
@@ -273,7 +288,7 @@ function Progress({ step, setStep }) {
 }
 
 function PageIntro({ eyebrow, title, text, id }) { return <div className="page-intro"><span className="eyebrow">{eyebrow}</span><h1 id={id}>{title}</h1><p>{text}</p></div>; }
-function Field({ label, required, error, children, hint }) { return <label className={`field ${error ? 'has-error' : ''}`}><span className="field-label">{label}{required && <b>*</b>}</span>{children}{hint && <small>{hint}</small>}{error && <small className="error-text">{error}</small>}</label>; }
+function Field({ label, required, error, errorId, children, hint }) { return <label className={`field ${error ? 'has-error' : ''}`}><span className="field-label">{label}{required && <b>*</b>}</span>{children}{hint && <small>{hint}</small>}{error && <small id={errorId} className="error-text" role="alert">{error}</small>}</label>; }
 function BackControl({ children, onClick }) { return <button className="page-back" onClick={onClick}><ArrowLeft size={18}/><span>{children}</span></button>; }
 
 function History({ records, onResume, onDelete, onNew }) {
@@ -310,6 +325,10 @@ function History({ records, onResume, onDelete, onNew }) {
 
 function RequestForm({ form, update, toggleSpecial, errors, onNext }) {
   const cityOptions = ['台北市', '新北市', '桃園市'];
+  const districtSelect = (city, value, onChange, error, errorId) => <select value={value} onChange={e => onChange(e.target.value)} aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined}>
+    <option value="">請選擇行政區</option>
+    {(cityDistricts[city] ?? []).map(district => <option key={district} value={district}>{district}</option>)}
+  </select>;
   return <section className="container narrow">
     <PageIntro eyebrow="STEP 1 / 5" title="先告訴我們，這次要怎麼搬？" text="大約 2 分鐘完成。你的資訊只會用來篩選適合的模擬業者與產生詢價內容。" />
     <div className="card form-card">
@@ -318,9 +337,9 @@ function RequestForm({ form, update, toggleSpecial, errors, onNext }) {
       <hr />
       <div className="section-title"><span><MapPin /></span><div><h2>起訖地點</h2><p>區域即可，不需要詳細地址</p></div></div>
       <div className="route-grid">
-        <div className="route-point"><i>A</i><div className="form-grid two"><Field label="搬出縣市" required><select value={form.fromCity} onChange={e => update('fromCity', e.target.value)}>{cityOptions.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="行政區" required error={errors.from}><input value={form.fromDistrict} onChange={e => update('fromDistrict', e.target.value)} placeholder="例如：大安區" /></Field></div></div>
+        <div className="route-point"><i>A</i><div className="form-grid two"><Field label="搬出縣市" required><select value={form.fromCity} onChange={e => update('fromCity', e.target.value)}>{cityOptions.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="搬出行政區" required error={errors.from} errorId="from-district-error">{districtSelect(form.fromCity, form.fromDistrict, value => update('fromDistrict', value), errors.from, 'from-district-error')}</Field></div></div>
         <div className="route-dash" />
-        <div className="route-point destination"><i>B</i><div className="form-grid two"><Field label="搬入縣市" required><select value={form.toCity} onChange={e => update('toCity', e.target.value)}>{cityOptions.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="行政區" required error={errors.to}><input value={form.toDistrict} onChange={e => update('toDistrict', e.target.value)} placeholder="例如：板橋區" /></Field></div></div>
+        <div className="route-point destination"><i>B</i><div className="form-grid two"><Field label="搬入縣市" required><select value={form.toCity} onChange={e => update('toCity', e.target.value)}>{cityOptions.map(x => <option key={x}>{x}</option>)}</select></Field><Field label="搬入行政區" required error={errors.to} errorId="to-district-error">{districtSelect(form.toCity, form.toDistrict, value => update('toDistrict', value), errors.to, 'to-district-error')}</Field></div></div>
       </div>
       <hr />
       <div className="section-title"><span><Box /></span><div><h2>搬運內容</h2><p>概略估算即可，之後可以修改</p></div></div>
