@@ -222,6 +222,12 @@ function App() {
     setHistoryOpen(false);
   };
 
+  const goHome = () => {
+    setStep(0);
+    setHistoryOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const restoreRecord = record => {
     setForm(structuredClone(record.form));
     setSelectedCompany(companies.find(company => company.id === record.selectedCompanyId) ?? companies[0]);
@@ -253,7 +259,7 @@ function App() {
       aria-modal={historyOpen ? 'true' : undefined}
       aria-labelledby={historyOpen ? 'history-page-title' : undefined}
     >
-      <Header onHistory={toggleHistory} historyOpen={historyOpen} historyControlRef={historyControlRef} />
+      <Header onHome={goHome} onHistory={toggleHistory} historyOpen={historyOpen} historyControlRef={historyControlRef} />
       {!historyOpen && <Progress step={step} setStep={setStep} />}
       <main className={historyOpen ? 'history-modal-main' : ''}>
         {historyOpen ? <History records={records} onResume={restoreRecord} onDelete={deleteRecord} onNew={resetWorkflow} /> : <>
@@ -269,9 +275,9 @@ function App() {
   );
 }
 
-function Header({ onHistory, historyOpen, historyControlRef }) {
+function Header({ onHome, onHistory, historyOpen, historyControlRef }) {
   return <header className="topbar">
-    <button className="brand brand-button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></button>
+    <button type="button" className="brand brand-button" onClick={onHome} aria-label="MoveEasy 首頁"><span className="brand-mark"><Truck size={22} /></span><span>Move<span>Easy</span></span></button>
     <div className="prototype-badge"><Sparkles size={14} /> MVP 測試版</div>
     <div className="header-actions"><div className="help"><ShieldCheck size={16} /> 不需填寫真實個資</div><button ref={historyControlRef} type="button" className={`history-action ${historyOpen ? 'active' : ''}`} onClick={onHistory} aria-label={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'} aria-expanded={historyOpen} title={historyOpen ? '關閉詢價紀錄' : '詢價紀錄'}>{historyOpen ? <X size={20} /> : <><Clock3 size={17} /> 詢價紀錄</>}</button></div>
   </header>;
@@ -313,11 +319,11 @@ function History({ records, onResume, onDelete, onNew }) {
   const dateTime = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' });
   return <section className="container history-view">
     <PageIntro id="history-page-title" eyebrow="儲存在此瀏覽器" title="詢價紀錄" text="回到先前的搬家需求，繼續聯絡業者、整理報價或比較方案。" />
-    {sorted.length ? <div className="history-grid">{sorted.map(record => <article className="card history-card" key={record.id}>
+    {sorted.length ? <div className="history-grid">{sorted.map((record, index) => <article className="card history-card" key={record.id}>
       <div className="history-card-head"><span className="history-date"><CalendarDays size={17}/>{record.form.date}</span><span className={`status-badge stage-${record.lastCompletedStep}`}>{steps[record.lastCompletedStep]?.label ?? '推薦業者'}</span></div>
       <h2>{record.form.fromCity}{record.form.fromDistrict} <ArrowRight size={17}/> {record.form.toCity}{record.form.toDistrict}</h2>
       <div className="history-meta"><span><LineChart size={16}/> 進度：{record.lastCompletedStep + 1} / 5</span><span><FileText size={16}/> {record.quotes.length} 份已確認報價</span><span><Clock3 size={16}/> 更新於 {dateTime.format(new Date(record.updatedAt))}</span></div>
-      <div className="history-card-actions"><button className="primary" onClick={() => onResume(record)}>繼續這筆詢價 <ArrowRight size={17}/></button><div className="history-more" ref={openMenuId === record.id ? openMenuRef : null}><button className="history-more-button" aria-haspopup="menu" aria-expanded={openMenuId === record.id} aria-label="更多紀錄操作" title="更多紀錄操作" onClick={() => setOpenMenuId(current => current === record.id ? null : record.id)}><span aria-hidden="true">⋯</span></button>{openMenuId === record.id && <div className="history-more-menu" role="menu"><button className="history-delete" role="menuitem" aria-label={`刪除 ${record.form.fromCity}${record.form.fromDistrict} 至 ${record.form.toCity}${record.form.toDistrict} 的詢價紀錄`} onClick={() => { setOpenMenuId(null); onDelete(record.id); }}><Trash2 size={16}/> 刪除</button></div>}</div></div>
+      <div className="history-card-actions"><button className={index === 0 ? 'primary' : 'secondary'} onClick={() => onResume(record)}>繼續這筆詢價 <ArrowRight size={17}/></button><div className="history-more" ref={openMenuId === record.id ? openMenuRef : null}><button className="history-more-button" aria-haspopup="menu" aria-expanded={openMenuId === record.id} aria-label="更多紀錄操作" title="更多紀錄操作" onClick={() => setOpenMenuId(current => current === record.id ? null : record.id)}><span aria-hidden="true">⋯</span></button>{openMenuId === record.id && <div className="history-more-menu" role="menu"><button className="history-delete" role="menuitem" aria-label={`刪除 ${record.form.fromCity}${record.form.fromDistrict} 至 ${record.form.toCity}${record.form.toDistrict} 的詢價紀錄`} onClick={() => { setOpenMenuId(null); onDelete(record.id); }}><Trash2 size={16}/> 刪除</button></div>}</div></div>
     </article>)}</div> : <div className="empty-state history-empty"><span><Clock3 size={34}/></span><h2>還沒有詢價紀錄</h2><p>完成搬家需求並查看推薦業者後，紀錄就會安全地保存在這個瀏覽器。</p><button className="primary" onClick={onNew}><Plus size={17}/> 建立搬家需求</button></div>}
     {sorted.length > 0 && <div className="action-row center"><button className="secondary" onClick={onNew}><Plus size={17}/> 建立新的搬家需求</button></div>}
   </section>;
@@ -367,9 +373,9 @@ function Recommendations({ matches, form, onEdit, onSelect }) {
       <div className="meta"><span>服務區域</span><p>{c.areas.join('、')}</p><span>適合類型</span><p>{c.types.join('、')}</p></div>
       <div className="tag-list">{c.services.map(s => <span key={s}><Check size={12}/>{s}</span>)}</div>
       <div className="response"><Clock3 size={15}/>{c.response}</div>
-      <button className="primary full" onClick={() => onSelect(c)}>查看聯絡與詢價 <ArrowRight size={17}/></button>
+      <button className={`${i === 0 ? 'primary' : 'secondary'} full`} onClick={() => onSelect(c)}>查看聯絡與詢價 <ArrowRight size={17}/></button>
       <small className="mock-label">模擬業者資料・僅供原型測試</small>
-    </article>)}</div> : <div className="empty-state"><span><Truck size={34}/></span><h2>目前沒有完全符合的業者</h2><p>試著調整服務區域或特殊搬運需求，我們不會推薦條件不明的業者。</p><button className="secondary" onClick={onEdit}>返回修改條件</button></div>}
+    </article>)}</div> : <div className="empty-state"><span><Truck size={34}/></span><h2>目前沒有完全符合的業者</h2><p>試著調整服務區域或特殊搬運需求，我們不會推薦條件不明的業者。</p><button className="primary" onClick={onEdit}>返回修改條件</button></div>}
   </section>;
 }
 
@@ -385,7 +391,7 @@ function Contact({ company, message, setMessage, copied, onCopy, onBack, onNext 
       </aside>
       <div className="card message-card"><div className="card-heading"><div><span className="eyebrow">詢價訊息</span><h2>已依你的需求產生</h2></div><Edit3 size={19}/></div><textarea value={message} onChange={e => setMessage(e.target.value)} rows="14"/><div className="message-actions"><span><Info size={14}/> 可直接修改文字</span><button className={copied ? 'success-btn' : 'primary'} onClick={onCopy}>{copied ? <CheckCircle2 size={17}/> : <Clipboard size={17}/>} {copied ? '已複製' : '複製詢價訊息'}</button></div></div>
     </div>
-    <div className="action-row end"><button className="primary" onClick={onNext}>我已取得報價，下一步 <ArrowRight size={17}/></button></div>
+    <div className="action-row end"><button className="secondary" onClick={onNext}>我已取得報價，下一步 <ArrowRight size={17}/></button></div>
   </section>;
 }
 
@@ -400,18 +406,18 @@ function QuoteOrganizer({ quoteText, setQuoteText, activeExample, setActiveExamp
         <div className="example-row"><span>快速載入測試資料</span><button className={activeExample === 'orange' ? 'active' : ''} onClick={() => loadExample('orange')}>橘子搬家</button><button className={activeExample === 'ant' ? 'active' : ''} onClick={() => loadExample('ant')}>螞蟻快搬</button></div>
         <textarea rows="11" value={quoteText} onChange={e => setQuoteText(e.target.value)} placeholder="貼上 LINE、簡訊或 Email 收到的報價內容…" />
         <button className="upload-zone" onClick={() => loadExample(activeExample)}><Upload size={23}/><span><strong>或上傳報價截圖</strong><small>原型將載入模擬辨識內容</small></span></button>
-        <button className="primary full" disabled={!quoteText.trim()} onClick={onAnalyze}><Sparkles size={17}/> 開始模擬辨識</button>
+        <button className={`${quotes.length === 0 && !parsed ? 'primary' : 'secondary'} full`} disabled={!quoteText.trim()} onClick={onAnalyze}><Sparkles size={17}/> 開始模擬辨識</button>
       </div>
       <div className="card result-panel"><div className="card-heading"><div><span className="eyebrow">02 確認結果</span><h2>辨識出的報價資料</h2></div></div>
-        {parsed ? <QuoteEditor quote={parsed} onCancel={() => setParsed(null)} onSave={onSave} /> : <div className="result-placeholder"><span><FileText size={32}/></span><h3>等待辨識報價</h3><p>辨識後的金額、服務與待確認事項會顯示在這裡。</p></div>}
+        {parsed ? <QuoteEditor quote={parsed} primaryAction={quotes.length === 0} onCancel={() => setParsed(null)} onSave={onSave} /> : <div className="result-placeholder"><span><FileText size={32}/></span><h3>等待辨識報價</h3><p>辨識後的金額、服務與待確認事項會顯示在這裡。</p></div>}
       </div>
     </div>
-    {quotes.length > 0 && <div className="saved-quotes"><div className="saved-head"><div><span className="eyebrow">已確認報價</span><h2>{quotes.length} 份報價已加入比較</h2></div><button className="primary" onClick={onCompare}>前往比較 <ArrowRight size={17}/></button></div><div className="saved-list">{quotes.map(q => <div key={q.id}><CheckCircle2 size={19}/><strong>{q.company}</strong><span>NT$ {q.total.toLocaleString()}</span><button aria-label={`編輯 ${q.company} 報價`} title="編輯報價" onClick={() => setEditingQuote(editingQuote === q.id ? null : q.id)}><Edit3 size={15}/></button><button aria-label={`刪除 ${q.company} 報價`} title="刪除報價" onClick={() => onDelete(q.id)}><Trash2 size={15}/></button>{editingQuote === q.id && <div className="inline-edit"><QuoteEditor quote={q} onCancel={() => setEditingQuote(null)} onSave={onSave}/></div>}</div>)}</div>{quotes.length === 1 && <p className="one-quote"><Info size={15}/> 再新增一份報價，就能並列比較差異。</p>}</div>}
+    {quotes.length > 0 && <div className="saved-quotes"><div className="saved-head"><div><span className="eyebrow">已確認報價</span><h2>{quotes.length} 份報價已加入比較</h2></div><button className="primary" onClick={onCompare}>前往比較 <ArrowRight size={17}/></button></div><div className="saved-list">{quotes.map(q => <div key={q.id}><CheckCircle2 size={19}/><strong>{q.company}</strong><span>NT$ {q.total.toLocaleString()}</span><button aria-label={`編輯 ${q.company} 報價`} title="編輯報價" onClick={() => setEditingQuote(editingQuote === q.id ? null : q.id)}><Edit3 size={15}/></button><button aria-label={`刪除 ${q.company} 報價`} title="刪除報價" onClick={() => onDelete(q.id)}><Trash2 size={15}/></button>{editingQuote === q.id && <div className="inline-edit"><QuoteEditor quote={q} primaryAction={false} onCancel={() => setEditingQuote(null)} onSave={onSave}/></div>}</div>)}</div>{quotes.length === 1 && <p className="one-quote"><Info size={15}/> 再新增一份報價，就能並列比較差異。</p>}</div>}
     {quotes.length > 0 && <div className="action-row end"><button className="secondary" onClick={onCompare}>查看目前報價</button></div>}
   </section>;
 }
 
-function QuoteEditor({ quote, onCancel, onSave }) {
+function QuoteEditor({ quote, primaryAction = true, onCancel, onSave }) {
   const [draft, setDraft] = useState({ ...quote, includedText: quote.included.join('、'), extraText: quote.extra.join('、'), pendingText: quote.pending.join('、') });
   const finish = () => onSave({ ...draft, total: Number(draft.total) || 0, included: splitTags(draft.includedText), extra: splitTags(draft.extraText), pending: splitTags(draft.pendingText) });
   return <div className="quote-editor">
@@ -421,7 +427,7 @@ function QuoteEditor({ quote, onCancel, onSave }) {
     <Field label="額外費用"><textarea rows="2" value={draft.extraText} onChange={e => setDraft(d => ({...d, extraText: e.target.value}))}/></Field>
     <Field label="待確認事項"><textarea rows="2" value={draft.pendingText} onChange={e => setDraft(d => ({...d, pendingText: e.target.value}))}/></Field>
     <div className="confidence"><Info size={15}/> 金額信心度高・服務細節請人工確認</div>
-    <div className="editor-actions"><button className="ghost" onClick={onCancel}>取消</button><button className="primary" onClick={finish}><Check size={17}/> 確認並加入比較</button></div>
+    <div className="editor-actions"><button className="ghost" onClick={onCancel}>取消</button><button className={primaryAction ? 'primary' : 'secondary'} onClick={finish}><Check size={17}/> 確認並加入比較</button></div>
   </div>;
 }
 const splitTags = text => text.split(/[、,，\n]/).map(x => x.trim()).filter(Boolean);
@@ -440,7 +446,7 @@ function Comparison({ quotes, setQuotes, onAdd, onRestart, onBack }) {
     </tbody></table></div> : <div className="empty-state"><span><FileText size={34}/></span><h2>還沒有已確認的報價</h2><p>先加入一份報價，再回來查看整理結果。</p></div>}
     {quotes.length === 1 && <div className="single-notice"><Info size={19}/><div><strong>尚不足以比較</strong><span>再整理至少一份其他業者的報價，就能看見價格與服務差異。</span></div><button className="secondary" onClick={onAdd}><Plus size={16}/> 新增報價</button></div>}
     {quotes.length > 1 && <div className="decision-note"><ShieldCheck size={21}/><div><strong>最低價不一定是最適合的選擇</strong><p>預約前請向業者確認樓層費、停車費、家具拆裝、防護方式及臨時加價條件。</p></div></div>}
-    <div className="action-row center"><button className="secondary" onClick={onAdd}><Plus size={17}/> 新增其他報價</button><button className="ghost" onClick={onRestart}>重新建立搬家需求</button></div>
+    <div className="action-row center"><button className="primary" onClick={onAdd}><Plus size={17}/> 新增其他報價</button><button className="ghost" onClick={onRestart}>重新建立搬家需求</button></div>
   </section>;
 }
 
